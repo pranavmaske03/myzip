@@ -6,13 +6,24 @@
 #include <stdexcept>
 #include <vector>
 #include <queue>
+#include <array>
 
-using namespace std;
-namespace fs = filesystem;
+namespace fs = std::filesystem;
 
-class Compression
+// Error handling
+struct CompressionError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+struct FileError : CompressionError {
+    using CompressionError::CompressionError;
+};
+struct DataError : CompressionError {
+    using CompressionError::CompressionError;
+};
+
+class Compression 
 {
-    public:
+    private:
         struct Node {
             char ch;
             int freq;
@@ -28,204 +39,222 @@ class Compression
             }
         };
 
-        unordered_map<char, int> map;
-        unordered_map<char,string> codes;
+        const std::string filePath;
+        const std::string fileName;
+        std::unordered_map<char, int> freq;
+        std::unordered_map<char, std::string> codes;
+        int paddingSize;
         Node* root;
-        long long fileSize = 0;
-        int paddingSize = 0;
-        const string filePath;
-        const string fileName;
 
-        // constructor
-        Compression(const string& fp, const string& fn) : filePath(fp), fileName(fn) {}
+        void buildCodes(Node* node, const std::string& path);
+        uint8_t makeByte(const std::string& bits);
+        void writeOutput(const std::vector<uint8_t>& buffer);
+        void deleteTree(Node* node);
 
-        bool frequencyCount()
-        {
-            if(!fs::exists(filePath)) {
-                throw runtime_error("The Input file does not exist.");
-            }
-        
-            ifstream file(filePath);
-            file.exceptions(ifstream::badbit);
+    public:
+        Compression(const std::string& fp, const std::string& fn);
+        ~Compression();
 
-            if(!file.is_open()) {
-                throw runtime_error("Unable to read the file :: (permission denied or locked): " + filePath);
-            }
-
-            char buffer[1 << 20];  // read 1 MB of data at once
-            while (file.read(buffer, sizeof(buffer)) || file.gcount()) {
-                size_t n = file.gcount();
-                for (size_t i = 0; i < n; ++i) {
-                    map[(unsigned char)buffer[i]]++;
-                }
-            }
-
-            if(!file.eof()) {
-                throw runtime_error("Error occurred while reading file :: " + filePath);
-            }
-            if(map.empty()) {
-                throw runtime_error("File is empty.");
-            }
-            for(const auto& [ch, count] : map) {
-                cout << "Key: " << ch << "\tValue: " << count << '\n';
-            }
-            return true;
-        } 
-        
-        bool buildHuffmanTree()
-        {
-            priority_queue<Node*,vector<Node*>,Compare> min_heap;
-
-            for(const auto& [key, value]: map) {
-                Node* new_node = new Node(key, value);
-                min_heap.push(new_node);
-            }
-
-            while(min_heap.size() > 1) {
-                Node* left = min_heap.top(); min_heap.pop();
-                Node* right = min_heap.top(); min_heap.pop();
-
-                Node* new_node = new Node(left->freq + right->freq, left, right);
-                min_heap.push(new_node);
-            }
-            this->root = min_heap.top();
-
-            return (this->root) ? true : false;
-        }
-
-        void buildCodes(Node* root, string path)
-        {
-            if(root == nullptr) return;
-            if(!root->left && !root->right) {
-                codes[root->ch] = path;
-            }
-
-            buildCodes(root->left, path + "0");
-            buildCodes(root->right, path + "1");
-        }
-
-        bool generateCodes()
-        {
-            if(!root) {
-                throw runtime_error("Null Huffman tree");
-            }
-
-            codes.clear(); 
-            buildCodes(this->root, "");
-
-            if(codes.empty()) {
-                throw runtime_error("Huffman code generation failed");
-            }
-            if(codes.size() == 1) {
-                codes.begin()->second = "0";
-            }
-            return true;
-        }
-
-        bool writeData(vector<uint8_t>& buffer)
-        {
-            string compressedFilePath = "../Storage/Compressed/" + this->fileName + ".bin";
-            ofstream out(compressedFilePath, ios::binary);
-            if(!out) {
-                throw runtime_error("Failed to open output file.");
-            }
-
-            out.write(reinterpret_cast<char*>(buffer.data()), buffer.size());
-            if(!out) {
-                throw runtime_error("Write failed.");
-            }
-
-            out.close();   
-            if(!out) {
-                throw runtime_error("Error occurred while closing the file.");
-            }
-
-            return true;
-        }
-
-        uint8_t generateByte(string& code)
-        {
-            uint8_t byte = 0;
-            for (int i = 0; i < 8 && i < code.length(); i++) {
-                if (code[i] == '1') {
-                    byte |= (1 << (7 - i));
-                }
-            }
-            return byte;
-        }
-
-        bool encodeData()
-        {
-            if(!fs::exists(this->filePath)) {
-                throw runtime_error("The Input file does not exist.");
-            }
-        
-            ifstream file(filePath, ios::binary);
-            file.exceptions(ifstream::badbit);
-
-            if(!file.is_open()) {
-                throw runtime_error("Unable to read the file :: (permission denied or locked): " + filePath);
-            }
-
-            string code;
-            vector<uint8_t> buffer;
-            char ch;
-            char chunk[1 << 20]; // 1 MB
-
-            while(file.read(chunk, sizeof(chunk)) || file.gcount()) {
-                size_t n = file.gcount();
-                for(size_t i = 0; i < n; ++i) {
-                    code += codes[(unsigned char)chunk[i]];
-                    while(code.size() >= 8) {
-                        buffer.push_back(generateByte(code));
-                        code.erase(0, 8);
-                    }
-                }
-            }
-            if(!code.empty()) {
-                paddingSize = 8 - code.size();
-                buffer.push_back(generateByte(code));
-            }
-            if(!file.eof()) {
-                throw runtime_error("Error occurred while encoding the data :: " + filePath);
-            }
-            bool ret = writeData(buffer);
-            return ret;
-        }
+        void frequencyCount();
+        void buildHuffmanTree();
+        void generateCodes();
+        void encodeData();
 };
+
+Compression::Compression(const std::string& fp, const std::string& fn): filePath(fp), fileName(fn) 
+{
+    root = nullptr;
+    paddingSize = 0;
+}
+
+Compression::~Compression() 
+{
+    deleteTree(root);
+}
+
+void Compression::buildCodes(Node* node, const std::string& path) 
+{
+    if(node == nullptr) return;
+
+    if(!node->left && !node->right) {
+        codes[node->ch] = path;
+    }
+
+    buildCodes(node->left, path + "0");
+    buildCodes(node->right, path + "1");
+}
+
+uint8_t Compression::makeByte(const std::string& bits) 
+{ 
+    uint8_t byte = 0;
+    for(size_t i = 0; i < 8 && i < bits.size(); i++) {
+        if(bits[i] == '1') {
+            byte |= (1 << (7 - i));
+        }
+    }
+    return byte;
+}
+
+void Compression::writeOutput(const std::vector<uint8_t>& buffer) 
+{
+   fs::create_directories("../Storage/Compressed");
+    std::string outputPath = "../Storage/Compressed/" + fileName + ".bin";
+
+    std::ofstream out(outputPath, std::ios::binary);
+    if(!out) {
+        throw FileError("Cannot open output file: " + outputPath);
+    }
+
+    out.write(
+        reinterpret_cast<const char*>(buffer.data()),
+        static_cast<std::streamsize>(buffer.size())
+    );
+
+    if (!out) {
+        throw FileError("Failed to write output file: " + outputPath);
+    } 
+}
+
+void Compression::deleteTree(Node* node) 
+{
+    if(node == nullptr) return;
+    deleteTree(node->left);
+    deleteTree(node->right);
+    delete node;
+}
+
+void Compression::frequencyCount() 
+{
+    std::ifstream file(filePath, std::ios::binary);
+    if(!file) {
+        throw FileError("Cannot open the input file. "+filePath);
+    }
+    char buffer[1 << 20]; // 1 MB size buffer
+
+    while(file.read(buffer, sizeof(buffer)) || file.gcount()) {
+        for(size_t i = 0; i < static_cast<size_t>(file.gcount()); ++i) {
+            freq[(unsigned char)buffer[i]]++;
+        }
+    }
+     for(const auto& [ch, count] : freq) {
+                std::cout << "Key: " << ch << "\tValue: " << count << '\n';
+            }
+    if(freq.empty()) {
+        throw DataError("Input file is empty.");
+    }
+}
+
+void Compression::buildHuffmanTree() 
+{
+    std::priority_queue<Node*, std::vector<Node*>, Compare> pq;
+
+    for(int i = 0; i < 256; ++i) {
+        if(freq[i] > 0) {
+            pq.push(new Node((char)i, freq[i]));
+        }
+    }
+    if(pq.empty()) {
+        throw DataError("No symbols to build Huffman tree");    
+    }
+
+    while(pq.size() > 1) {
+        Node* left = pq.top(); pq.pop();
+        Node* right = pq.top(); pq.pop();
+
+        Node* parent = new Node(left->freq + right->freq, left, right);
+        pq.push(parent);
+    }
+    root = pq.top();
+}
+
+void Compression::generateCodes() 
+{
+    if(!root) {
+        throw DataError("Null Huffman tree.\nCodes cannot be generated.");
+    }
+
+    codes.clear(); 
+    buildCodes(root, "");
+
+    if(codes.size() == 1) {
+        codes.begin()->second = "0";
+    }
+}
+
+void Compression::encodeData() 
+{
+    std::ifstream file(filePath, std::ios::binary);
+    if(!file) {
+        throw FileError("Cannot open input file for encoding.\n");
+    }          
+    std::vector<uint8_t> output;
+    std::string bitBuffer;
+    char chunk[1 << 20]; // read 1MB data per read call;
+
+    while(file.read(chunk, sizeof(chunk)) || file.gcount()) {
+        for(size_t i = 0; i < static_cast<size_t>(file.gcount()); i++) {
+            auto it = codes.find(chunk[i]);
+            if(it == codes.end()) {
+                throw DataError("Missing Huffman Code.\n");
+            }
+
+            bitBuffer += it->second;
+
+            while(bitBuffer.size() >= 8) {
+                output.push_back(makeByte(bitBuffer.substr(0, 8)));
+                bitBuffer.erase(0, 8);
+            }
+        }
+    }
+    if(file.bad()) {
+        throw FileError("I/O error while reading input file.\n");
+    }   
+    if(!bitBuffer.empty()) {
+        paddingSize = 8 - bitBuffer.size();
+        output.push_back(makeByte(bitBuffer));
+    }
+
+    writeOutput(output);
+}
 
 int main(int argc, char* argv[])
 {
     try {
-        
         if(argc != 2) {
-            cout<<"Error: Not enough arguments.\n";
-            cerr << "Usage: program <file_path>\n";
+            std::cerr<<"Error: Wrong command line arguments.\n";
+            std::cerr<<"Usage: compressor <input_file>\n";
             return EXIT_FAILURE;
         }
 
+        fs::path defaultDir = "../Storage/Input/";
         fs::path inputPath(argv[1]);
-        if(!fs::exists(inputPath)) {
-            std::cerr << "Error: file does not exist\n";
-            return EXIT_FAILURE;
+
+        if(inputPath.has_filename() && !inputPath.has_parent_path()) {
+            inputPath = defaultDir / inputPath;
         }
-        const string filePath = inputPath.string();
-        const string fileName = inputPath.stem().string();
-        cout<<"File path (input) : "<<filePath<<'\n';
-        cout<< "File name (compressed) : "<<fileName<< '\n';
-        
-        Compression obj(filePath, fileName);
-        
-        if(obj.frequencyCount()) cout<<"Successfully counted frequencies...\n";
-        if(obj.buildHuffmanTree()) cout<<"Sucessfully build huffman tree..\n";
-        if(obj.generateCodes()) cout<<"Code generation process successfull...\n";   
-        if(obj.encodeData()) cout<<"Encoding sucessfull..\n";
 
-    } catch (const exception& ex) {
-        cerr << "Error: " << ex.what() << '\n';
-        return EXIT_FAILURE;
+        if(!fs::exists(inputPath)) {
+            throw FileError("Input file does not exist: " + inputPath.string());
+        }
+
+        Compression compressor(inputPath.string(), inputPath.stem().string());
+
+        compressor.frequencyCount();
+        compressor.buildHuffmanTree();
+        compressor.generateCodes();
+        compressor.encodeData();
+
+        std::cout<<"Compression completed successfully.\n";
+        return EXIT_SUCCESS;
     }
-
-    return EXIT_SUCCESS;
+    catch(const FileError& e) {
+        std::cerr<<"File error: "<< e.what()<<'\n';
+    }
+    catch(const DataError& e) {
+        std::cerr<<"Data error: "<< e.what()<<'\n';
+    }
+    catch(const std::exception& e) {
+        std::cerr<<"Unexpected error: "<< e.what()<<'\n';
+    }
+    return EXIT_FAILURE;
 }
-
