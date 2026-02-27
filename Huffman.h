@@ -4,7 +4,8 @@
 #include<iostream>
 #include<memory>
 #include<unordered_map>
-#include<unordered_set>         
+#include<unordered_set>     
+#include <filesystem>    
 #include<bitset>
 #include<list>
 #include<queue>
@@ -13,6 +14,8 @@
 namespace LZ_zip {
 
     class LZ77;
+    namespace fs = std::filesystem;
+
     class Huffman {
         private:
             int root;
@@ -35,14 +38,21 @@ namespace LZ_zip {
             std::unordered_map<int, std::string> literalCode;
             std::unordered_map<std::string, unsigned short> literalNumber;
 
-            template
-            <typename _key, typename _value, typename _target>
+            template <typename _key, typename _value, typename _target>
             void buildHuffmanTree(_target mp, int index);
+
+            template <typename _mp, typename _code>
+            void write(std::string& buffer, OutputStream& os, const _mp& keyValue, _code& code);
+
             void processTokens(std::unique_ptr<LZ77>& lz_ptr);
             void buildDistanceCodes(int root, std::string&& str);
             void buildLengthCodes(int root, std::string&& str);
             void buildLiteralCodes(int root, std::string&& str);
+            void writeEncodedData();
+            bool zeroFill(std::string& str) const ;
+            char conStrChar(const std::string& str, size_t pos, size_t n);
             void init();
+
 
         public:
             Huffman() = default;
@@ -64,6 +74,8 @@ namespace LZ_zip {
         buildHuffmanTree<int, unsigned short, decltype(literal)> (literal, 256);
         buildLiteralCodes(root, "");
         init();
+
+        writeEncodedData();
     }
 
     void Huffman::processTokens(std::unique_ptr<LZ77>& lz_ptr) {
@@ -81,8 +93,7 @@ namespace LZ_zip {
         tokensSize = tokens.size();
     }
 
-    template
-    <typename _key, typename _value, typename _target>
+    template <typename _key, typename _value, typename _target>
     void Huffman::buildHuffmanTree(_target freqTable, int index) {
         using Node = std::pair<_key, _value>;
         std::priority_queue<Node,std::vector<Node>,std::greater<Node>> minHeap;
@@ -136,24 +147,66 @@ namespace LZ_zip {
         buildLiteralCodes(HuffmanTree[root][1], str + '1');
     }
 
+    void Huffman::writeEncodedData() {
+        fs::path inputFile(fileName);
+        const std::string _filename = inputFile.stem().string();
+        std::cout<<"file name without extension: "<<_filename<<std::endl;
+        OutputStream os(_filename + ".LZ-zip");
+        std::string buffer;
+
+        write(buffer, os, orderDistance, distanceCode);
+        write(buffer, os, orderLength, lengthCode);
+        write(buffer, os, orderLiteral, literalCode);
+        if(zeroFill(buffer)) {
+            char byte = conStrChar(buffer, 0, 8);
+            os.writeFile(byte);
+        }
+    }
+
+    template <typename _mp, typename _code>
+    void Huffman::write(std::string& buffer, OutputStream& os, const _mp& keyValue, _code& code)
+    {
+        for(const auto& _number : keyValue) {
+            std::string bits = code[_number];
+            buffer.append(bits);
+
+            while(buffer.size() >= 8) {
+                char byte = conStrChar(buffer, 0, 8);
+                os.writeFile(byte);
+                buffer.erase(0, 8);
+            }
+        }
+    }
+
+    bool Huffman::zeroFill(std::string& str) const {
+        size_t len = 8 - str.size();
+        if(len) {
+            while(len--) str.push_back('0');        
+            return true;
+        }
+        else return false;
+    }
+
     void Huffman::init() {
         for(int i = 0 ;i < 65537; ++i) HuffmanTree[i].clear();
+    }
+
+    char Huffman::conStrChar(const std::string& str, size_t pos, size_t n) {
+        std::bitset<8> number(str, pos, n);
+        return static_cast<char> (number.to_ulong());
     }
 
     void Huffman::display() const {
         std::cout << "\n===== HUFFMAN INITIAL DATA =====\n";
         std::cout << "\nTotal Tokens: " << tokensSize << "\n";
-        // Distance frequency
         std::cout << "\nDistance Frequency:\n";
         for (const auto& [key, value] : distance) {
             std::cout << "Distance " << key << " -> " << value << "\n";
         }
-        // Length frequency
         std::cout << "\nLength Frequency:\n";
         for (const auto& [key, value] : length) {
             std::cout << "Length " << key << " -> " << value << "\n";
         }
-        // Literal frequency
         std::cout << "\nLiteral Frequency:\n";
         for (const auto& [key, value] : literal) {
             if (key == '\0')
