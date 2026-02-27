@@ -37,8 +37,12 @@ namespace LZ_zip {
 
             template
             <typename _key, typename _value, typename _target>
-            void encoding(_target mp, int index);
+            void buildHuffmanTree(_target mp, int index);
             void processTokens(std::unique_ptr<LZ77>& lz_ptr);
+            void buildDistanceCodes(int root, std::string&& str);
+            void buildLengthCodes(int root, std::string&& str);
+            void buildLiteralCodes(int root, std::string&& str);
+            void init();
 
         public:
             Huffman() = default;
@@ -48,6 +52,18 @@ namespace LZ_zip {
 
     void Huffman::encodeTokens(std::unique_ptr<LZ77>& lz_ptr) {
         processTokens(lz_ptr);
+
+        buildHuffmanTree<int, int, decltype(distance)> (distance, 32768);
+        buildDistanceCodes(root, "");
+        init();
+
+        buildHuffmanTree<int, int, decltype(length)> (length, 256);
+        buildLengthCodes(root, "");
+        init();
+
+        buildHuffmanTree<int, unsigned short, decltype(literal)> (literal, 256);
+        buildLiteralCodes(root, "");
+        init();
     }
 
     void Huffman::processTokens(std::unique_ptr<LZ77>& lz_ptr) {
@@ -63,6 +79,65 @@ namespace LZ_zip {
             orderLiteral.push_back(_literal);
         }
         tokensSize = tokens.size();
+    }
+
+    template
+    <typename _key, typename _value, typename _target>
+    void Huffman::buildHuffmanTree(_target freqTable, int index) {
+        using Node = std::pair<_key, _value>;
+        std::priority_queue<Node,std::vector<Node>,std::greater<Node>> minHeap;
+
+        for (const auto& [_symbol, _frequency] : freqTable) {
+            minHeap.emplace(_frequency, _symbol);
+        }
+
+        while (minHeap.size() > 1) {
+            Node leftNode  = minHeap.top(); minHeap.pop();
+            Node rightNode = minHeap.top(); minHeap.pop();
+
+            Node curr = std::make_pair(leftNode.first + rightNode.first, ++index);
+            minHeap.emplace(std::move(curr));
+            HuffmanTree[index].emplace_back(leftNode.second);
+            HuffmanTree[index].emplace_back(rightNode.second);
+        }
+        root = minHeap.top().second;
+    }
+
+    void Huffman::buildDistanceCodes(int root, std::string&& str) {
+        if(HuffmanTree[root].empty()) {
+            // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
+            distanceNumber[str] = static_cast<short>(root);
+            distanceCode[root] = std::move(str);
+            return;
+        }
+        buildDistanceCodes(HuffmanTree[root][0], str + '0');
+        buildDistanceCodes(HuffmanTree[root][1], str + '1');
+    }
+
+    void Huffman::buildLengthCodes(int root, std::string&& str) {
+        if(HuffmanTree[root].empty()) {
+            // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
+            lengthNumber[str] = static_cast<short>(root);
+            lengthCode[root] = std::move(str);
+            return;
+        }
+        buildLengthCodes(HuffmanTree[root][0], str + '0');
+        buildLengthCodes(HuffmanTree[root][1], str + '1');
+    }
+
+    void Huffman::buildLiteralCodes(int root, std::string&& str) {
+        if(HuffmanTree[root].empty()) {
+            // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
+            literalNumber[str] = static_cast<short>(root);
+            literalCode[root] = std::move(str);
+            return;
+        }
+        buildLiteralCodes(HuffmanTree[root][0], str + '0');
+        buildLiteralCodes(HuffmanTree[root][1], str + '1');
+    }
+
+    void Huffman::init() {
+        for(int i = 0 ;i < 65537; ++i) HuffmanTree[i].clear();
     }
 
     void Huffman::display() const {
