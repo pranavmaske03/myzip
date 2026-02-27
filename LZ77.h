@@ -25,6 +25,9 @@ namespace LZ_zip {
 
             void runLZ77();
             void generateTokens(const std::string_view& file);
+            const std::vector<Token>& getTokens() const;
+            const std::string& getFileName() const;
+
         public:
             LZ77() = default;
             explicit LZ77(std::string name): 
@@ -37,6 +40,13 @@ namespace LZ_zip {
     };
 
     void LZ77::encode() { runLZ77(); }
+
+    const std::vector<LZ77::Token>& LZ77::getTokens() const {
+        return tokens;
+    }
+    const std::string& LZ77::getFileName() const {
+        return fileName;
+    }
 
     void LZ77::display() const {
         std::cout<<"file size : "<<fileSize<<std::endl;

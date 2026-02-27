@@ -19,6 +19,8 @@ namespace LZ_zip {
         void compress() {
             lz_ptr->encode();
             lz_ptr->display();
+            huf_ptr->encodeTokens(lz_ptr);
+            huf_ptr->display();
         }     
     };
 }
