@@ -23,6 +23,7 @@ namespace LZ_zip {
             std::string fileName;
             std::vector<int> HuffmanTree[65537];
 
+            std::vector<typename LZ77::Token> decodeResult;
             std::unordered_map<int, int> distance; 
             std::unordered_map<int, int> length;
             std::unordered_map<unsigned short, int> literal;
@@ -45,18 +46,21 @@ namespace LZ_zip {
             void write(std::string& buffer, OutputStream& os, const _mp& keyValue, _code& code);
 
             void processTokens(std::unique_ptr<LZ77>& lz_ptr);
+            void decodeTokens(const std::string& fileContent);
             void buildDistanceCodes(int root, std::string&& str);
             void buildLengthCodes(int root, std::string&& str);
             void buildLiteralCodes(int root, std::string&& str);
             void writeEncodedData();
             bool zeroFill(std::string& str) const ;
             char conStrChar(const std::string& str, size_t pos, size_t n);
+            std::string getBytes(char ch);
             void init();
 
 
         public:
             Huffman() = default;
             void encodeTokens(std::unique_ptr<LZ77>& lz_ptr);
+            void decodeCompressedFile();
             void display() const;
     };
 
@@ -91,6 +95,7 @@ namespace LZ_zip {
             orderLiteral.push_back(_literal);
         }
         tokensSize = tokens.size();
+        decodeResult.resize(tokens.size());
     }
 
     template <typename _key, typename _value, typename _target>
@@ -150,7 +155,7 @@ namespace LZ_zip {
     void Huffman::writeEncodedData() {
         fs::path inputFile(fileName);
         const std::string _filename = inputFile.stem().string();
-        std::cout<<"file name without extension: "<<_filename<<std::endl;
+        // std::cout<<"file name without extension: "<<_filename<<std::endl;
         OutputStream os(_filename + ".LZ-zip");
         std::string buffer;
 
@@ -215,6 +220,74 @@ namespace LZ_zip {
                 std::cout << "Literal '" << key << "' -> " << value << "\n";
         }
         std::cout << "\n===============================\n";
+    }
+
+    // Decoding methods
+    void Huffman::decodeCompressedFile() {
+        fs::path inputFile(fileName);
+        const std::string _filename = inputFile.stem().string();
+        InputStream in(_filename + ".LZ-zip");
+        std::string data = in.readFile();
+        std::cout<<"Decoded bytes : \n";
+        for(int i = 0; i < 20 && i < data.size(); i++) {
+            unsigned char byte = static_cast<unsigned char> (data[i]);
+            std::cout<<(int)byte<<"\t";
+        }
+        std::cout<<std::endl;
+        std::cout<<"Size of the decode file data : "<<data.size()<<std::endl;
+        std::string fileContent;
+        for(int i = 0; i < data.size(); i++) {
+            fileContent.append(std::move(getBytes(data[i])));
+        }
+        std::cout<<"filecontent : "<<fileContent<<std::endl;
+        decodeTokens(fileContent);
+    }
+
+    void Huffman::decodeTokens(const std::string& fileContent) {
+        size_t index = 0;
+        std::string str;
+
+        size_t entry = 0;
+        while(entry < tokensSize) {
+            str.push_back(fileContent[index++]);
+            if(distanceNumber.find(str) != distanceNumber.end()) {
+                decodeResult[entry++].distance = distanceNumber[str];
+                str.clear();
+            }
+        }
+
+        entry = 0;
+        while(entry < tokensSize) {
+            str.push_back(fileContent[index++]);
+            if(lengthNumber.find(str) != lengthNumber.end()) {
+                decodeResult[entry++].length = lengthNumber[str];
+                str.clear();
+            }
+        }
+
+        entry = 0;
+        while(entry < tokensSize) {
+            str.push_back(fileContent[index++]);
+            if(literalNumber.find(str) != literalNumber.end()) {
+                decodeResult[entry++].literal = literalNumber[str];
+                str.clear();
+            }
+        }
+
+        std::cout<<"Size of the decode result is :"<<decodeResult.size()<<std::endl;
+        std::cout<<"Decode result tocken: \n";
+        for(auto T : decodeResult){
+            std::cout << T.distance << " " <<T.length << " " << T.literal << std::endl;
+        }
+    }
+
+    std::string Huffman::getBytes(char ch) {
+        static unsigned char bit[8] = {128, 64, 32, 16, 8, 4, 2, 1};
+        std::string str;
+        for(int i = 0;i < 8; ++i) {
+            ch & bit[i] ? str.push_back('1') : str.push_back('0');
+        }
+        return str;
     }
 }
 

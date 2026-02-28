@@ -22,6 +22,11 @@ namespace LZ_zip {
             huf_ptr->encodeTokens(lz_ptr);
             huf_ptr->display();
         }     
+
+        void decompress() {
+            huf_ptr->decodeCompressedFile();
+            
+        }
     };
 }
 
