@@ -62,6 +62,10 @@ namespace LZ_zip {
             void encodeTokens(std::unique_ptr<LZ77>& lz_ptr);
             void decodeCompressedFile();
             void display() const;
+
+            const auto& returnDecodedtokens() const {
+                return decodeResult;
+            }
     };
 
     void Huffman::encodeTokens(std::unique_ptr<LZ77>& lz_ptr) {
@@ -228,18 +232,14 @@ namespace LZ_zip {
         const std::string _filename = inputFile.stem().string();
         InputStream in(_filename + ".LZ-zip");
         std::string data = in.readFile();
-        std::cout<<"Decoded bytes : \n";
         for(int i = 0; i < 20 && i < data.size(); i++) {
             unsigned char byte = static_cast<unsigned char> (data[i]);
-            std::cout<<(int)byte<<"\t";
         }
-        std::cout<<std::endl;
-        std::cout<<"Size of the decode file data : "<<data.size()<<std::endl;
         std::string fileContent;
         for(int i = 0; i < data.size(); i++) {
             fileContent.append(std::move(getBytes(data[i])));
         }
-        std::cout<<"filecontent : "<<fileContent<<std::endl;
+        // std::cout<<"filecontent : "<<fileContent<<std::endl;
         decodeTokens(fileContent);
     }
 
@@ -274,11 +274,11 @@ namespace LZ_zip {
             }
         }
 
-        std::cout<<"Size of the decode result is :"<<decodeResult.size()<<std::endl;
-        std::cout<<"Decode result tocken: \n";
-        for(auto T : decodeResult){
-            std::cout << T.distance << " " <<T.length << " " << T.literal << std::endl;
-        }
+        // std::cout<<"Size of the decode result is :"<<decodeResult.size()<<std::endl;
+        // std::cout<<"Decode result tocken: \n";
+        // for(auto T : decodeResult){
+        //     std::cout << T.distance << " " <<T.length << " " << T.literal << std::endl;
+        // }
     }
 
     std::string Huffman::getBytes(char ch) {

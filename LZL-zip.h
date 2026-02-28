@@ -25,7 +25,9 @@ namespace LZ_zip {
 
         void decompress() {
             huf_ptr->decodeCompressedFile();
-            
+            auto tokens = huf_ptr->returnDecodedtokens();
+            lz_ptr->assignDecodedResult(tokens);
+            lz_ptr->decode();
         }
     };
 }

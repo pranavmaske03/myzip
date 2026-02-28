@@ -18,7 +18,9 @@ namespace LZ_zip {
             };
 
             std::vector<Token> tokens;
+            std::vector<Token> decodedResult;
             std::string fileName;   
+            std::string decodeFileContent;
             InputStream fileStream;
             std::size_t fileSize;
             std::size_t maxWindow = 32767;
@@ -27,6 +29,8 @@ namespace LZ_zip {
             void generateTokens(const std::string_view& file);
             const std::vector<Token>& getTokens() const;
             const std::string& getFileName() const;
+            void assignDecodedResult(const decltype(decodedResult)& result);
+            void decodeData();
 
         public:
             LZ77() = default;
@@ -35,17 +39,24 @@ namespace LZ_zip {
                 fileStream(fileName) {}
             
             void encode();
+            void decode();
             void display() const;
 
     };
 
     void LZ77::encode() { runLZ77(); }
+    void LZ77::decode() { decodeData(); }
 
     const std::vector<LZ77::Token>& LZ77::getTokens() const {
         return tokens;
     }
+
     const std::string& LZ77::getFileName() const {
         return fileName;
+    }
+
+    void LZ77::assignDecodedResult(const decltype(decodedResult)& result) {
+        decodedResult.assign(result.begin(), result.end());
     }
 
     void LZ77::display() const {
@@ -56,10 +67,32 @@ namespace LZ_zip {
         }
     }
 
+    void LZ77::decodeData() {
+        for(int i = 0; i < decodedResult.size(); i++) {
+            if(decodedResult[i].length == 0) {
+                decodeFileContent += decodedResult[i].literal;
+            } else {
+                int length = decodeFileContent.length();
+                length -= decodedResult[i].distance;
+                std::string tmp = decodeFileContent.substr(length, decodedResult[i].length);
+                decodeFileContent += tmp;
+                if(decodedResult[i].literal != '\0') {
+                    decodeFileContent += decodedResult[i].literal;
+                }
+            }
+        }
+
+        // std::cout<<"Decode file content : \n";
+        // std::cout<<decodeFileContent<<std::endl;
+        OutputStream os("decode-"+fileName);
+        os.writeFile(decodeFileContent);
+    }
+
     void LZ77::runLZ77() {
         const std::string& fileContent = fileStream.readFile();
         fileSize = fileContent.size();
-        std::cout<<"file content : "<<fileContent<<std::endl;
+        // std::cout<<"file content : "<<fileContent<<std::endl;
+        decodeFileContent.reserve(fileContent.size());
         generateTokens(fileContent);
     }
 
