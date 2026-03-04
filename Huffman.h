@@ -176,8 +176,8 @@ namespace LZ_zip {
     inline void Huffman::write(std::string& buffer, OutputStream& os, const _mp& keyValue, _code& code)
     {
         for(const auto& _number : keyValue) {
-            std::string bits = code[_number];
-            buffer.append(bits);
+            auto it = code.find(_number);
+            if (it != code.end()) buffer.append(it->second);
 
             while(buffer.size() >= 8) {
                 char byte = conStrChar(buffer, 0, 8);
@@ -188,6 +188,7 @@ namespace LZ_zip {
     }
 
     inline bool Huffman::zeroFill(std::string& str) const {
+        if(str.empty()) return false;
         size_t len = 8 - str.size();
         if(len) {
             while(len--) str.push_back('0');        

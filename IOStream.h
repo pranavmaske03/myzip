@@ -10,15 +10,15 @@ namespace LZ_zip {
     class InputStream {
         public:
             explicit InputStream(std::string name)
-            : fileName(name) {
-                if (!fileName.is_open()) {
+            : fileStream(name, std::ios::binary | std::ios::in) {
+                if (!fileStream.is_open()) {
                     std::cout << "Error: file not open\n";
                 }
             }
 
             std::string readFile() {
                 std::ostringstream buffer;
-                buffer << fileName.rdbuf();
+                buffer << fileStream.rdbuf();
                 return buffer.str();
             }
 
@@ -26,10 +26,10 @@ namespace LZ_zip {
             void Close() { closeFile(); }
 
         private:
-            std::fstream fileName;
+            std::ifstream fileStream;
             void closeFile() {
-                if(fileName.is_open()) 
-                    fileName.close();
+                if(fileStream.is_open())
+                    fileStream.close();
             }
     };
 

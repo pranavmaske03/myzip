@@ -120,14 +120,14 @@ namespace LZ_zip {
                 Token tmp;
                 tmp.length = lookaheadWindowSize;
                 tmp.distance = searchWindowSize - matchIndex;
-                tmp.literal = input[i + lookaheadWindowSize];
+                tmp.literal = (i + lookaheadWindowSize < input.length()) ? input[i + lookaheadWindowSize] : '\0';
                 tokens.push_back(std::move(tmp));
                 i += lookaheadWindowSize;
             } else {
                 Token tmp;
                 tmp.length = 0;
                 tmp.distance = 0;
-                tmp.literal = input[i + lookaheadWindowSize];
+                tmp.literal = (i + lookaheadWindowSize < input.length()) ? input[i + lookaheadWindowSize] : '\0';
                 tokens.push_back(std::move(tmp));
             }
         }
