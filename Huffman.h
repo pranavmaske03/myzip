@@ -45,11 +45,11 @@ namespace LZ_zip {
             template <typename _mp, typename _code>
             void write(std::string& buffer, OutputStream& os, const _mp& keyValue, _code& code);
 
+            template <typename CodeMap, typename NumberMap>
+            void buildCodes(int node, std::string code, CodeMap& codeOut, NumberMap& numberOut);
+
             void processTokens(std::unique_ptr<LZ77>& lz_ptr);
             void decodeTokens(const std::string& fileContent);
-            void buildDistanceCodes(int root, std::string&& str);
-            void buildLengthCodes(int root, std::string&& str);
-            void buildLiteralCodes(int root, std::string&& str);
             void writeEncodedData();
             bool zeroFill(std::string& str) const ;
             char conStrChar(const std::string& str, size_t pos, size_t n);
@@ -72,15 +72,15 @@ namespace LZ_zip {
         processTokens(lz_ptr);
 
         buildHuffmanTree<int, int, decltype(distance)> (distance, 32768);
-        buildDistanceCodes(root, "");
+        buildCodes(root, "", distanceCode, distanceNumber);
         init();
 
         buildHuffmanTree<int, int, decltype(length)> (length, 256);
-        buildLengthCodes(root, "");
+        buildCodes(root, "", lengthCode, lengthNumber);
         init();
 
         buildHuffmanTree<int, unsigned short, decltype(literal)> (literal, 256);
-        buildLiteralCodes(root, "");
+        buildCodes(root, "", literalCode, literalNumber);
         init();
 
         writeEncodedData();
@@ -123,38 +123,49 @@ namespace LZ_zip {
         root = minHeap.top().second;
     }
 
-    inline void Huffman::buildDistanceCodes(int root, std::string&& str) {
-        if(HuffmanTree[root].empty()) {
-            // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
-            distanceNumber[str] = static_cast<short>(root);
-            distanceCode[root] = std::move(str);
+    template <typename CodeMap, typename NumberMap>
+    inline void Huffman::buildCodes(int node, std::string code, CodeMap& codeOut, NumberMap& numberOut) {
+        if (HuffmanTree[node].empty()) {
+            codeOut[node]   = code;
+            numberOut[code] = node;
             return;
         }
-        buildDistanceCodes(HuffmanTree[root][0], str + '0');
-        buildDistanceCodes(HuffmanTree[root][1], str + '1');
+        buildCodes(HuffmanTree[node][0], code + '0', codeOut, numberOut);
+        buildCodes(HuffmanTree[node][1], code + '1', codeOut, numberOut);
     }
 
-    inline void Huffman::buildLengthCodes(int root, std::string&& str) {
-        if(HuffmanTree[root].empty()) {
-            // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
-            lengthNumber[str] = static_cast<short>(root);
-            lengthCode[root] = std::move(str);
-            return;
-        }
-        buildLengthCodes(HuffmanTree[root][0], str + '0');
-        buildLengthCodes(HuffmanTree[root][1], str + '1');
-    }
+    // inline void Huffman::buildDistanceCodes(int root, std::string&& str) {
+    //     if(HuffmanTree[root].empty()) {
+    //         // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
+    //         distanceNumber[str] = static_cast<short>(root);
+    //         distanceCode[root] = std::move(str);
+    //         return;
+    //     }
+    //     buildDistanceCodes(HuffmanTree[root][0], str + '0');
+    //     buildDistanceCodes(HuffmanTree[root][1], str + '1');
+    // }
 
-    inline void Huffman::buildLiteralCodes(int root, std::string&& str) {
-        if(HuffmanTree[root].empty()) {
-            // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
-            literalNumber[str] = static_cast<short>(root);
-            literalCode[root] = std::move(str);
-            return;
-        }
-        buildLiteralCodes(HuffmanTree[root][0], str + '0');
-        buildLiteralCodes(HuffmanTree[root][1], str + '1');
-    }
+    // inline void Huffman::buildLengthCodes(int root, std::string&& str) {
+    //     if(HuffmanTree[root].empty()) {
+    //         // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
+    //         lengthNumber[str] = static_cast<short>(root);
+    //         lengthCode[root] = std::move(str);
+    //         return;
+    //     }
+    //     buildLengthCodes(HuffmanTree[root][0], str + '0');
+    //     buildLengthCodes(HuffmanTree[root][1], str + '1');
+    // }
+
+    // inline void Huffman::buildLiteralCodes(int root, std::string&& str) {
+    //     if(HuffmanTree[root].empty()) {
+    //         // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
+    //         literalNumber[str] = static_cast<short>(root);
+    //         literalCode[root] = std::move(str);
+    //         return;
+    //     }
+    //     buildLiteralCodes(HuffmanTree[root][0], str + '0');
+    //     buildLiteralCodes(HuffmanTree[root][1], str + '1');
+    // }
 
     inline void Huffman::writeEncodedData() {
         fs::path inputFile(fileName);
