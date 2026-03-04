@@ -31,17 +31,15 @@ namespace LZ_zip {
             const std::string& getFileName() const;
             void assignDecodedResult(const decltype(decodedResult)& result);
             void decodeData();
+            void encode();
+            void decode();
+            void display() const;
 
         public:
             LZ77() = default;
             explicit LZ77(std::string name): 
                 fileName(std::move(name)),
                 fileStream(fileName) {}
-            
-            void encode();
-            void decode();
-            void display() const;
-
     };
 
     inline void LZ77::encode() { runLZ77(); }
@@ -56,7 +54,7 @@ namespace LZ_zip {
     }
 
     inline void LZ77::assignDecodedResult(const decltype(decodedResult)& result) {
-        decodedResult.assign(result.begin(), result.end());
+        decodedResult = std::move(result);
     }
 
     inline void LZ77::display() const {

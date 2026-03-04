@@ -17,6 +17,8 @@ namespace LZ_zip {
     namespace fs = std::filesystem;
 
     class Huffman {
+        friend class LZL_zip;
+        
         private:
             int root;
             size_t tokensSize;
@@ -28,9 +30,9 @@ namespace LZ_zip {
             std::unordered_map<int, int> length;
             std::unordered_map<unsigned short, int> literal;
 
-            std::list<int> orderDistance;
-            std::list<int> orderLength;
-            std::list<unsigned short> orderLiteral;
+            std::vector<int> orderDistance;
+            std::vector<int> orderLength;
+            std::vector<unsigned short> orderLiteral;
 
             std::unordered_map<int, std::string> distanceCode;
             std::unordered_map<std::string, short> distanceNumber;
@@ -55,17 +57,14 @@ namespace LZ_zip {
             char conStrChar(const std::string& str, size_t pos, size_t n);
             std::string getBytes(char ch);
             void init();
-
-
-        public:
-            Huffman() = default;
             void encodeTokens(std::unique_ptr<LZ77>& lz_ptr);
             void decodeCompressedFile();
             void display() const;
 
-            const auto& returnDecodedtokens() const {
-                return decodeResult;
-            }
+            const auto& returnDecodedtokens() const { return decodeResult; }
+        public:
+            Huffman() = default;
+            
     };
 
     inline void Huffman::encodeTokens(std::unique_ptr<LZ77>& lz_ptr) {
@@ -211,9 +210,6 @@ namespace LZ_zip {
         const std::string _filename = inputFile.stem().string();
         InputStream in(_filename + ".LZ-zip");
         std::string data = in.readFile();
-        for(int i = 0; i < 20 && i < data.size(); i++) {
-            unsigned char byte = static_cast<unsigned char> (data[i]);
-        }
         std::string fileContent;
         for(int i = 0; i < data.size(); i++) {
             fileContent.append(std::move(getBytes(data[i])));
