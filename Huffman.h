@@ -39,11 +39,11 @@ namespace LZ_zip {
             std::unordered_map<int, std::string> literalCode;
             std::unordered_map<std::string, unsigned short> literalNumber;
 
-            template <typename _key, typename _value, typename _target>
-            void buildHuffmanTree(_target mp, int index);
+            template <typename Key, typename Value, typename Map>
+            void buildHuffmanTree(Map mp, int index);
 
-            template <typename _mp, typename _code>
-            void write(std::string& buffer, OutputStream& os, const _mp& keyValue, _code& code);
+            template <typename OrderList, typename CodeMap>
+            void write(std::string& buffer, OutputStream& os, const OrderList& keyValue, const CodeMap& code);
 
             template <typename CodeMap, typename NumberMap>
             void buildCodes(int node, std::string code, CodeMap& codeOut, NumberMap& numberOut);
@@ -102,9 +102,9 @@ namespace LZ_zip {
         decodeResult.resize(tokens.size());
     }
 
-    template <typename _key, typename _value, typename _target>
-    inline void Huffman::buildHuffmanTree(_target freqTable, int index) {
-        using Node = std::pair<_key, _value>;
+    template <typename Key, typename Value, typename Map>
+    inline void Huffman::buildHuffmanTree(Map freqTable, int index) {
+        using Node = std::pair<Key, Value>;
         std::priority_queue<Node,std::vector<Node>,std::greater<Node>> minHeap;
 
         for (const auto& [_symbol, _frequency] : freqTable) {
@@ -134,39 +134,6 @@ namespace LZ_zip {
         buildCodes(HuffmanTree[node][1], code + '1', codeOut, numberOut);
     }
 
-    // inline void Huffman::buildDistanceCodes(int root, std::string&& str) {
-    //     if(HuffmanTree[root].empty()) {
-    //         // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
-    //         distanceNumber[str] = static_cast<short>(root);
-    //         distanceCode[root] = std::move(str);
-    //         return;
-    //     }
-    //     buildDistanceCodes(HuffmanTree[root][0], str + '0');
-    //     buildDistanceCodes(HuffmanTree[root][1], str + '1');
-    // }
-
-    // inline void Huffman::buildLengthCodes(int root, std::string&& str) {
-    //     if(HuffmanTree[root].empty()) {
-    //         // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
-    //         lengthNumber[str] = static_cast<short>(root);
-    //         lengthCode[root] = std::move(str);
-    //         return;
-    //     }
-    //     buildLengthCodes(HuffmanTree[root][0], str + '0');
-    //     buildLengthCodes(HuffmanTree[root][1], str + '1');
-    // }
-
-    // inline void Huffman::buildLiteralCodes(int root, std::string&& str) {
-    //     if(HuffmanTree[root].empty()) {
-    //         // std::cout<<"Leaf found: Symbol = "<<root<<", Code = "<<str<<"\n";
-    //         literalNumber[str] = static_cast<short>(root);
-    //         literalCode[root] = std::move(str);
-    //         return;
-    //     }
-    //     buildLiteralCodes(HuffmanTree[root][0], str + '0');
-    //     buildLiteralCodes(HuffmanTree[root][1], str + '1');
-    // }
-
     inline void Huffman::writeEncodedData() {
         fs::path inputFile(fileName);
         const std::string _filename = inputFile.stem().string();
@@ -183,8 +150,8 @@ namespace LZ_zip {
         }
     }
 
-    template <typename _mp, typename _code>
-    inline void Huffman::write(std::string& buffer, OutputStream& os, const _mp& keyValue, _code& code)
+    template <typename OrderList, typename CodeMap>
+    inline void Huffman::write(std::string& buffer, OutputStream& os, const OrderList& keyValue, const CodeMap& code)
     {
         for(const auto& _number : keyValue) {
             auto it = code.find(_number);

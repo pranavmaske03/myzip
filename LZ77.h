@@ -99,10 +99,11 @@ namespace LZ_zip {
     inline void LZ77::generateTokens(const std::string_view& input) {
         size_t searchWindowSize = 0;
         size_t lookaheadWindowSize = 0;
+        constexpr size_t maxLookahead = 256;
+        
         for(size_t i = 0; i < input.length(); i++) {
             searchWindowSize = (i + 1 <= maxWindow) ? i : maxWindow;
-            lookaheadWindowSize = (i + searchWindowSize < input.length()) ? searchWindowSize : input.length() - i;
-
+            lookaheadWindowSize = std::min( input.length() - i, maxLookahead );
             std::string_view searchWindow = input.substr(i - searchWindowSize, searchWindowSize);
             std::string_view lookaheadWindow = input.substr(i, lookaheadWindowSize);
 
