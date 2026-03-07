@@ -1,1 +1,8 @@
+# Test cases for compression (one input per line; blank line = empty file)
 ABABABCABABABC
+AAAAAAA
+ABCDEFGHIJKL
+A
+ABABABABAB
+ABCABCABCA1
+0123456789012345
