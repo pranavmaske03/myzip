@@ -4,11 +4,11 @@
 #include<iostream>
 #include<memory>
 #include<unordered_map>
-#include<unordered_set>     
-#include <filesystem>    
+#include<filesystem>    
 #include<bitset>
-#include<list>
+#include<vector>
 #include<queue>
+#include<stdexcept>
 #include"LZ77.h"
 
 namespace LZ_zip {
@@ -16,14 +16,48 @@ namespace LZ_zip {
     class LZ77;
     namespace fs = std::filesystem;
 
+    /**
+     * @ Huffman             : Encodes LZ77 tokens using Huffman coding and writes
+     *                         the compressed bitstream to a .LZ-zip file.
+     *                         Decodes the compressed file back into tokens.
+     *
+     * @ encodeTokens        : Full encode pipeline — process tokens, build trees,
+     *                         generate codes, write bitstream to disk.
+     *
+     * @ decodeCompressedFile: Reads the .LZ-zip file and decodes it back into tokens.
+     *
+     * @ processTokens       : Extracts frequency tables and ordered sequences
+     *                         from the LZ77 token list.
+     *
+     * @ buildHuffmanTree    : Builds a min-heap based Huffman tree from a
+     *                         frequency table. Internal nodes stored in huffmanTree map.
+     *
+     * @ buildCodes          : DFS traversal of the Huffman tree to assign
+     *                         binary codes to each symbol (0 = left, 1 = right).
+     *
+     * @ write               : Appends Huffman codes to a bit buffer and flushes
+     *                         complete bytes to the output stream.
+     *
+     * @ decodeTokens        : Reads the bitstream and reconstructs the token list
+     *                         by matching bit patterns against the Huffman code tables.
+     *
+     * @ zeroFill            : Pads the remaining bits in the buffer to a full byte
+     *                         before the final flush.
+     *
+     * @ conStrChar          : Converts an 8-bit string of '0'/'1' characters to a char.
+     * @ getBytes            : Converts a char to its 8-bit string representation.
+     * @ init                : Clears the Huffman tree map between encode passes.
+     * @ display             : Prints frequency tables to stdout for debugging.
+     * @ returnDecodedtokens : Returns the reconstructed token list to LZL_zip.
+     */
     class Huffman {
         friend class LZL_zip;
         
         private:
-            int root;
-            size_t tokensSize;
+            int root = 0;
+            size_t tokensSize = 0;
             std::string fileName;
-            std::vector<int> HuffmanTree[65537];
+            std::unordered_map<int, std::vector<int>> huffmanTree;
 
             std::vector<typename LZ77::Token> decodeResult;
             std::unordered_map<int, int> distance; 
@@ -53,7 +87,7 @@ namespace LZ_zip {
             void processTokens(std::unique_ptr<LZ77>& lz_ptr);
             void decodeTokens(const std::string& fileContent);
             void writeEncodedData();
-            bool zeroFill(std::string& str) const ;
+            bool zeroFill(std::string& str) const;
             char conStrChar(const std::string& str, size_t pos, size_t n);
             std::string getBytes(char ch);
             void init();
@@ -62,23 +96,23 @@ namespace LZ_zip {
             void display() const;
 
             const auto& returnDecodedtokens() const { return decodeResult; }
+
         public:
             Huffman() = default;
-            
     };
 
     inline void Huffman::encodeTokens(std::unique_ptr<LZ77>& lz_ptr) {
         processTokens(lz_ptr);
 
-        buildHuffmanTree<int, int, decltype(distance)> (distance, 32768);
+        buildHuffmanTree<int, int, decltype(distance)>(distance, 32768);
         buildCodes(root, "", distanceCode, distanceNumber);
         init();
 
-        buildHuffmanTree<int, int, decltype(length)> (length, 256);
+        buildHuffmanTree<int, int, decltype(length)>(length, 256);
         buildCodes(root, "", lengthCode, lengthNumber);
         init();
 
-        buildHuffmanTree<int, unsigned short, decltype(literal)> (literal, 256);
+        buildHuffmanTree<int, unsigned short, decltype(literal)>(literal, 256);
         buildCodes(root, "", literalCode, literalNumber);
         init();
 
@@ -88,6 +122,10 @@ namespace LZ_zip {
     inline void Huffman::processTokens(std::unique_ptr<LZ77>& lz_ptr) {
         auto tokens = lz_ptr->getTokens();
         fileName = lz_ptr->getFileName();
+
+        if(tokens.empty()) {
+            throw std::runtime_error("processTokens: token list is empty — was encode() called?");
+        }
         
         for(const auto& [_distance, _length, _literal] : tokens) {
             distance[_distance]++;
@@ -103,11 +141,20 @@ namespace LZ_zip {
 
     template <typename Key, typename Value, typename Map>
     inline void Huffman::buildHuffmanTree(Map freqTable, int index) {
+        if(freqTable.empty()) {
+            throw std::runtime_error("buildHuffmanTree: frequency table is empty");
+        }
+
         using Node = std::pair<Key, Value>;
-        std::priority_queue<Node,std::vector<Node>,std::greater<Node>> minHeap;
+        std::priority_queue<Node, std::vector<Node>, std::greater<Node>> minHeap;
 
         for (const auto& [_symbol, _frequency] : freqTable) {
             minHeap.emplace(_frequency, _symbol);
+        }
+
+        if(minHeap.size() == 1) {
+            root = minHeap.top().second;
+            return;
         }
 
         while (minHeap.size() > 1) {
@@ -116,27 +163,27 @@ namespace LZ_zip {
 
             Node curr = std::make_pair(leftNode.first + rightNode.first, ++index);
             minHeap.emplace(std::move(curr));
-            HuffmanTree[index].emplace_back(leftNode.second);
-            HuffmanTree[index].emplace_back(rightNode.second);
+            huffmanTree[index].emplace_back(leftNode.second);
+            huffmanTree[index].emplace_back(rightNode.second);
         }
         root = minHeap.top().second;
     }
 
     template <typename CodeMap, typename NumberMap>
     inline void Huffman::buildCodes(int node, std::string code, CodeMap& codeOut, NumberMap& numberOut) {
-        if (HuffmanTree[node].empty()) {
+        if (huffmanTree[node].empty()) {
+            if(code.empty()) code = "0";
             codeOut[node]   = code;
             numberOut[code] = node;
             return;
         }
-        buildCodes(HuffmanTree[node][0], code + '0', codeOut, numberOut);
-        buildCodes(HuffmanTree[node][1], code + '1', codeOut, numberOut);
+        buildCodes(huffmanTree[node][0], code + '0', codeOut, numberOut);
+        buildCodes(huffmanTree[node][1], code + '1', codeOut, numberOut);
     }
 
     inline void Huffman::writeEncodedData() {
         fs::path inputFile(fileName);
         const std::string _filename = inputFile.stem().string();
-        // std::cout<<"file name without extension: "<<_filename<<std::endl;
         OutputStream os(_filename + ".LZ-zip");
         std::string buffer;
 
@@ -150,12 +197,12 @@ namespace LZ_zip {
     }
 
     template <typename OrderList, typename CodeMap>
-    inline void Huffman::write(std::string& buffer, OutputStream& os, const OrderList& keyValue, const CodeMap& code)
-    {
+    inline void Huffman::write(std::string& buffer, OutputStream& os, const OrderList& keyValue, const CodeMap& code) {
         for(const auto& _number : keyValue) {
             auto it = code.find(_number);
-            if (it != code.end()) buffer.append(it->second);
-
+            if (it != code.end()) {
+                buffer.append(it->second);
+            }
             while(buffer.size() >= 8) {
                 char byte = conStrChar(buffer, 0, 8);
                 os.writeFile(byte);
@@ -167,20 +214,17 @@ namespace LZ_zip {
     inline bool Huffman::zeroFill(std::string& str) const {
         if(str.empty()) return false;
         size_t len = 8 - str.size();
-        if(len) {
-            while(len--) str.push_back('0');        
-            return true;
-        }
-        else return false;
+        while(len--) str.push_back('0');
+        return true;
     }
 
     inline void Huffman::init() {
-        for(int i = 0 ;i < 65537; ++i) HuffmanTree[i].clear();
+        huffmanTree.clear();
     }
 
     inline char Huffman::conStrChar(const std::string& str, size_t pos, size_t n) {
         std::bitset<8> number(str, pos, n);
-        return static_cast<char> (number.to_ulong());
+        return static_cast<char>(number.to_ulong());
     }
 
     inline void Huffman::display() const {
@@ -199,31 +243,41 @@ namespace LZ_zip {
             if (key == '\0')
                 std::cout << "Literal \\0 -> " << value << "\n";
             else
-                std::cout << "Literal '" << key << "' -> " << value << "\n";
+                std::cout << "Literal '" << (char)key << "' -> " << value << "\n";
         }
         std::cout << "\n===============================\n";
     }
 
-    // Decoding methods
     inline void Huffman::decodeCompressedFile() {
         fs::path inputFile(fileName);
         const std::string _filename = inputFile.stem().string();
         InputStream in(_filename + ".LZ-zip");
         std::string data = in.readFile();
-        std::string fileContent;
-        for(int i = 0; i < data.size(); i++) {
-            fileContent.append(std::move(getBytes(data[i])));
+
+        if(data.empty()) {
+            throw std::runtime_error("decodeCompressedFile: compressed file is empty or missing");
         }
-        // std::cout<<"filecontent : "<<fileContent<<std::endl;
+
+        std::string fileContent;
+        fileContent.reserve(data.size() * 8);
+        for(size_t i = 0; i < data.size(); i++) {
+            fileContent.append(getBytes(data[i]));
+        }
         decodeTokens(fileContent);
     }
 
     inline void Huffman::decodeTokens(const std::string& fileContent) {
         size_t index = 0;
         std::string str;
+        const size_t totalBits = fileContent.size();
+
+        auto safePeek = [&]() -> bool {
+            return index < totalBits;
+        };
 
         size_t entry = 0;
         while(entry < tokensSize) {
+            if(!safePeek()) throw std::runtime_error("decodeTokens: bitstream ended while reading distance tokens");
             str.push_back(fileContent[index++]);
             if(distanceNumber.find(str) != distanceNumber.end()) {
                 decodeResult[entry++].distance = distanceNumber[str];
@@ -233,6 +287,7 @@ namespace LZ_zip {
 
         entry = 0;
         while(entry < tokensSize) {
+            if(!safePeek()) throw std::runtime_error("decodeTokens: bitstream ended while reading length tokens");
             str.push_back(fileContent[index++]);
             if(lengthNumber.find(str) != lengthNumber.end()) {
                 decodeResult[entry++].length = lengthNumber[str];
@@ -242,25 +297,21 @@ namespace LZ_zip {
 
         entry = 0;
         while(entry < tokensSize) {
+            if(!safePeek()) throw std::runtime_error("decodeTokens: bitstream ended while reading literal tokens");
             str.push_back(fileContent[index++]);
             if(literalNumber.find(str) != literalNumber.end()) {
                 decodeResult[entry++].literal = literalNumber[str];
                 str.clear();
             }
         }
-
-        // std::cout<<"Size of the decode result is :"<<decodeResult.size()<<std::endl;
-        // std::cout<<"Decode result tocken: \n";
-        // for(auto T : decodeResult){
-        //     std::cout << T.distance << " " <<T.length << " " << T.literal << std::endl;
-        // }
     }
 
     inline std::string Huffman::getBytes(char ch) {
-        static unsigned char bit[8] = {128, 64, 32, 16, 8, 4, 2, 1};
+        static const unsigned char bit[8] = {128, 64, 32, 16, 8, 4, 2, 1};
         std::string str;
-        for(int i = 0;i < 8; ++i) {
-            ch & bit[i] ? str.push_back('1') : str.push_back('0');
+        str.reserve(8);
+        for(int i = 0; i < 8; ++i) {
+            str.push_back((ch & bit[i]) ? '1' : '0');
         }
         return str;
     }
